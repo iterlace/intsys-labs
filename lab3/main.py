@@ -217,7 +217,7 @@ for day in DAYS:
         timeslot = best_schedule.timetable.pop()
 
         print(
-            f"{day}, слот №{slot}: {SUBJECTS[timeslot.subject_id]} від "
+            f"{day}, {slot+1} пара: {SUBJECTS[timeslot.subject_id]} від "
             f"{TEACHERS[timeslot.teacher_id].name} для {GROUPS[timeslot.group_id].name}"
         )
 
