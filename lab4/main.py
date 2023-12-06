@@ -1,148 +1,155 @@
-import random
-from typing import Generator, List, Optional, Set, Tuple
+from typing import List
+
+import pydantic
 
 
-class CSP:
-    def __init__(self) -> None:
-        self.days = ["Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця"]
-        self.disciplines_count = {
-            0: 2,
-            1: 1,
-            2: 1,
-            3: 2,
-            4: 1,
-            5: 2,
-            6: 2,
-            7: 1,
-            8: 1,
-            9: 2,
-        }
-        self.disciplines: List[str] = [
-            "ОС з розподілом часу",
-            "Проблеми штучного інтелекту",
-            "Нейронні мережі",
-            "Лаб. Нейронні мережі",
-            "Інтелектуальні системи",
-            "Лаб. Інтелектуальні системи",
-            "Iнформаційні технології в менеджментi",
-            "Вибрані розділи трудового права і основ підприємницької діяльності",
-            "Розробка програмного забезпечення",
-            "Лаб. Розробка програмного забезпечення",
-        ]
-        self.teachers = list(range(9))
-        self.teacher_disciplines = [{0}, {1}, {2, 3}, {4}, {5}, {6, 7}, {8}, {9}, {9}]
+class Subject(pydantic.BaseModel):
+    name: str
 
-        self.num_days = len(self.days)
-        self.num_classes = 3
-        self.num_classes_total = self.num_days * self.num_classes
+    def __init__(self, name: str, **kwargs) -> None:
+        kwargs["name"] = name
+        super().__init__(**kwargs)
 
-        self.num_teachers = len(self.teachers)
-        self.num_disciplines = len(self.disciplines)
+    def __hash__(self):
+        return hash(self.name)
 
-        self.disciplines_index: Set[int] = set(range(self.num_disciplines))
 
-        self.subject_assignments: List[Optional[int]] = [None] * self.num_classes_total
-        self.teacher_assignments: List[Optional[int]] = [None] * self.num_classes_total
+class GroupSubject(pydantic.BaseModel):
+    subject: Subject
+    hours: int
 
-        self.checks: int = 0
+    def __init__(self, subject: Subject, hours: int, **kwargs) -> None:
+        kwargs["hours"] = hours
+        kwargs["subject"] = subject
+        super().__init__(**kwargs)
 
-    def intersection(self, set_a: Set[int], set_b: Set[int]) -> Set[int]:
-        return set_a & set_b
+    def __hash__(self):
+        return hash(self.name)
 
-    def constraints(self) -> bool:
-        self.checks += 1
 
-        for lesson, teacher in enumerate(self.teacher_assignments):
-            if teacher is not None and self.subject_assignments[
-                lesson
-            ] not in self.intersection(
-                self.disciplines_index, self.teacher_disciplines[teacher]
-            ):
+class Group(pydantic.BaseModel):
+    name: str
+    subjects: List[GroupSubject] = []
+
+    def __init__(self, name: str, subjects: List[GroupSubject], **kwargs) -> None:
+        kwargs["name"] = name
+        kwargs["subjects"] = subjects
+        super().__init__(**kwargs)
+
+    def __hash__(self):
+        return hash(self.name)
+
+
+class Teacher(pydantic.BaseModel):
+    name: str
+    subjects: List[Subject]  # refs to existing subjects
+
+    def __init__(self, name: str, **kwargs) -> None:
+        kwargs["name"] = name
+        super().__init__(**kwargs)
+
+    def __hash__(self):
+        return hash(self.name)
+
+
+days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+timeslots = [0, 1, 2, 3]
+subject = [
+    Subject("Discrete Mathematics"),
+    Subject("Computer Architecture"),
+    Subject("Operating Systems"),
+    Subject("Programming"),
+    Subject("English"),
+    Subject("Mathematical Analysis"),
+    Subject("Algebra and Geometry"),
+    Subject("Physical Education"),
+]
+subject_map = {s.name: s for s in subject}
+teachers = [
+    Teacher(
+        "Камаз Павлович",
+        subjects=[
+            subject_map["Discrete Mathematics"],
+            subject_map["Mathematical Analysis"],
+        ],
+    ),
+    Teacher("Макар Бьорнович", subjects=[subject_map["Computer Architecture"]]),
+    Teacher(
+        "Монстр Хайнєкен",
+        subjects=[
+            subject_map["Operating Systems"],
+            subject_map["Algebra and Geometry"],
+        ],
+    ),
+    Teacher("Замир Безрусні", subjects=[subject_map["Programming"]]),
+    Teacher("Володимир Тарануха", subjects=[subject_map["Programming"]]),
+    Teacher("Красовська І.В.", subjects=[subject_map["English"]]),
+    Teacher("Василь Неміров", subjects=[subject_map["Physical Education"]]),
+]
+
+GROUPS = [
+    Group(
+        "TK-41",
+        [
+            GroupSubject(subject_map["Programming"], 4),
+            GroupSubject(subject_map["Operating Systems"], 2),
+            GroupSubject(subject_map["English"], 1),
+            GroupSubject(subject_map["Mathematical Analysis"], 1),
+            GroupSubject(subject_map["Algebra and Geometry"], 1),
+        ],
+    ),
+    Group(
+        "MI-2",
+        [
+            GroupSubject(subject_map["Programming"], 2),
+            GroupSubject(subject_map["English"], 1),
+            GroupSubject(subject_map["Mathematical Analysis"], 3),
+            GroupSubject(subject_map["Algebra and Geometry"], 3),
+            GroupSubject(subject_map["Physical Education"], 1),
+        ],
+    ),
+    Group(
+        "ТТП-42",
+        [
+            GroupSubject(subject_map["Programming"], 2),
+            GroupSubject(subject_map["English"], 1),
+            GroupSubject(subject_map["Mathematical Analysis"], 3),
+            GroupSubject(subject_map["Algebra and Geometry"], 3),
+            GroupSubject(subject_map["Physical Education"], 1),
+        ],
+    ),
+]
+
+# Variables: (group, day, timeslot)
+variables = [
+    (group.name, day, timeslot)
+    for group in GROUPS
+    for day in days
+    for timeslot in timeslots
+]
+# Domains: lists of subjects that can be taught during a timeslot
+domains = {
+    var: [gs.subject.name for gs in group.subjects]
+    for var in variables
+    for group in GROUPS
+    if group.name == var[0]
+}
+# Constraints
+constraints = []
+
+
+# Constraint: A teacher cannot teach more than one class at the same time
+def teacher_conflict_constraint(assignment):
+    teacher_times = {}
+    for (group, day, timeslot), subject in assignment.items():
+        teacher = next(
+            (t for t in teachers if subject in [s.name for s in t.subjects]), None
+        )
+        if teacher:
+            if (teacher.name, day, timeslot) in teacher_times:
                 return False
-
-        subjects = [x for x in self.subject_assignments if x is not None]
-        if any(subjects.count(s) > self.disciplines_count[s] for s in subjects):
-            return False
-
-        if any(
-            self._has_consecutive_assignments(assignments)
-            for assignments in [self.teacher_assignments, self.subject_assignments]
-        ):
-            return False
-
-        return True
-
-    def _has_consecutive_assignments(self, assignments: List[Optional[int]]) -> bool:
-        for i in range(len(assignments) - self.num_classes + 1):
-            window = assignments[i : i + self.num_classes]
-            counts = {item: window.count(item) for item in set(window)}
-            if any(
-                count > self.num_classes - 1 and item is not None
-                for item, count in counts.items()
-            ):
-                return True
-        return False
-
-    def heuristic(self) -> Optional[int]:
-        try:
-            return self.teacher_assignments.index(None)
-        except ValueError:
-            return None
-
-    def domain(self) -> Generator[Tuple[int, int], None, None]:
-        shuffled_teachers = random.sample(self.teachers, len(self.teachers))
-        for teacher in shuffled_teachers:
-            available_classes = self.intersection(
-                self.disciplines_index, self.teacher_disciplines[teacher]
-            )
-            shuffled_subjects = random.sample(
-                list(available_classes), len(available_classes)
-            )
-
-            for subject in shuffled_subjects:
-                yield teacher, subject
-
-    def backtracking(self) -> bool:
-        lesson = self.heuristic()
-
-        if lesson is None:
-            return True
-
-        for teacher, subject in self.domain():
-            self.teacher_assignments[lesson], self.subject_assignments[lesson] = (
-                teacher,
-                subject,
-            )
-
-            if self.constraints() and self.backtracking():
-                return True
-
-            self.teacher_assignments[lesson], self.subject_assignments[lesson] = (
-                None,
-                None,
-            )
-
-        return False
-
-    def print_schedule(self) -> None:
-        for d in range(self.num_days):
-            print(f"\n{self.days[d]}")
-            for l in range(self.num_classes):
-                lesson = d * self.num_classes + l
-                teacher = self.teacher_assignments[lesson]
-                subject = self.subject_assignments[lesson]
-
-                if subject is not None and teacher is not None:
-                    print(
-                        f"{lesson + 1}: {self.disciplines[subject]} {self.teachers[teacher]}"
-                    )
-                else:
-                    print(f"{lesson + 1}: No class")
+            teacher_times[(teacher.name, day, timeslot)] = True
+    return True
 
 
-# Example usage
-csp = CSP()
-if csp.backtracking():
-    csp.print_schedule()
-else:
-    print("No valid schedule found.")
+constraints.append(teacher_conflict_constraint)
