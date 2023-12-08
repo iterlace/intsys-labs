@@ -122,22 +122,22 @@ GROUPS = [
         "MI-2",
         [
             GroupSubject(SUBJECTS_MAP["Programming"], 1),
-            # GroupSubject(SUBJECTS_MAP["English"], 1),
-            # GroupSubject(SUBJECTS_MAP["Mathematical Analysis"], 3),
-            # GroupSubject(SUBJECTS_MAP["Algebra and Geometry"], 3),
-            # GroupSubject(SUBJECTS_MAP["Physical Education"], 1),
+            GroupSubject(SUBJECTS_MAP["English"], 1),
+            GroupSubject(SUBJECTS_MAP["Mathematical Analysis"], 3),
+            GroupSubject(SUBJECTS_MAP["Algebra and Geometry"], 3),
+            GroupSubject(SUBJECTS_MAP["Physical Education"], 1),
         ],
     ),
-    # Group(
-    #     "ТТП-42",
-    #     [
-    #         GroupSubject(SUBJECTS_MAP["Programming"], 2),
-    #         GroupSubject(SUBJECTS_MAP["English"], 1),
-    #         GroupSubject(SUBJECTS_MAP["Mathematical Analysis"], 3),
-    #         GroupSubject(SUBJECTS_MAP["Algebra and Geometry"], 2),
-    #         GroupSubject(SUBJECTS_MAP["Physical Education"], 1),
-    #     ],
-    # ),
+    Group(
+        "ТТП-42",
+        [
+            GroupSubject(SUBJECTS_MAP["Programming"], 2),
+            GroupSubject(SUBJECTS_MAP["English"], 1),
+            GroupSubject(SUBJECTS_MAP["Mathematical Analysis"], 3),
+            GroupSubject(SUBJECTS_MAP["Algebra and Geometry"], 2),
+            GroupSubject(SUBJECTS_MAP["Physical Education"], 1),
+        ],
+    ),
 ]
 TOTAL_SLOTS_TO_BE_FILLED = 0
 for group in GROUPS:
@@ -147,145 +147,117 @@ for group in GROUPS:
 
 class Variable(pydantic.BaseModel):
     group: Group
-    day: str
-    timeslot: int
+    subject: Subject
+    subject_no: int
 
-    def __init__(self, group: Group, day: str, timeslot: int, **kwargs) -> None:
+    def __init__(
+        self, group: Group, subject: Subject, subject_no: int, **kwargs
+    ) -> None:
         kwargs["group"] = group
-        kwargs["day"] = day
-        kwargs["timeslot"] = timeslot
+        kwargs["subject"] = subject
+        kwargs["subject_no"] = subject_no
         super().__init__(**kwargs)
 
     def __hash__(self):
-        return hash((self.group, self.day, self.timeslot))
+        return hash((self.group, self.subject, self.subject_no))
 
     def __repr__(self):
-        return f"Variable({self.group}, {self.day}, {self.timeslot})"
+        return f"Variable({self.group}, {self.subject}, {self.subject_no})"
 
     def __str__(self):
         return repr(self)
 
 
-# Variables: (group, day, timeslot)
+# Variables
 variables = [
-    Variable(group, day, timeslot)
+    Variable(group, gs.subject, subject_no)
     for group in GROUPS
-    for day in days
-    for timeslot in timeslots
+    for gs in group.subjects
+    for subject_no in range(gs.hours)
 ]
-random.shuffle(variables)
 
-# Domains: lists of subjects that can be taught during a timeslot
+# Domains: tuples of (Day, Timeslot, Teacher)
 domains = {
     var: [
-        (gs.subject, teacher)
-        for gs in var.group.subjects
+        (day, timeslot, teacher)
+        for day in days
+        for timeslot in timeslots
         for teacher in TEACHERS
-        if gs.subject in teacher.subjects
+        if var.subject in teacher.subjects
     ]
     for var in variables
 }
+
 # Constraints
 constraints = []
+
+
+# Constraint: Ensure each subject is taught the required number of hours per week for each group
+def subject_frequency_constraint(assignment):
+    scheduled_counts = {(var.group, var.subject): 0 for var in variables}
+    for var, _ in assignment.items():
+        scheduled_counts[(var.group, var.subject)] += 1
+
+    for group in GROUPS:
+        for group_subject in group.subjects:
+            if scheduled_counts[(group, group_subject.subject)] > group_subject.hours:
+                return False
+
+    return True
 
 
 # Constraint: A teacher cannot teach more than one class at the same time
 def teacher_conflict_constraint(assignment):
     teacher_times = {}
-    for var, (subject, teacher) in assignment.items():
-        if subject not in teacher.subjects:
+    for var, (day, timeslot, teacher) in assignment.items():
+        if (teacher, day, timeslot) in teacher_times:
             return False
-        if (teacher, var.day, var.timeslot) in teacher_times:
-            return False
-        teacher_times[(teacher, var.day, var.timeslot)] = True
+        teacher_times[(teacher, day, timeslot)] = True
     return True
-
-
-constraints.append(teacher_conflict_constraint)
-
-
-# Constraint: Ensure each subject is taught the required number of hours per week for each group
-def subject_frequency_constraint(assignment):
-    counter = {(group, gs.subject): 0 for group in GROUPS for gs in group.subjects}
-    for var, (subject, _) in assignment.items():
-        if (var.group, subject) not in counter:
-            # unsupported subject for this group
-            return False
-        counter[(var.group, subject)] += 1
-
-    for group in GROUPS:
-        for group_subj in group.subjects:
-            if counter[(group, group_subj.subject)] > group_subj.hours:
-                return False
-
-    return True
-
-
-constraints.append(subject_frequency_constraint)
 
 
 # Constraint: No group should have more than one class at a time
 def timeslot_availability_within_a_group_constraint(assignment):
-    for var1, _ in assignment.items():
-        for var2, _ in assignment.items():
-            if (
-                var1.group == var2.group
-                and var1.day == var2.day
-                and var1.timeslot == var2.timeslot
-                and id(var1) != id(var2)  # TODO: does it work?
-            ):
-                # print("timeslot_availability_constraint failed")
-                return False
+    group_times = {}
+    for var, (day, timeslot, _) in assignment.items():
+        if (var.group, day, timeslot) in group_times:
+            return False
+        group_times[(var.group, day, timeslot)] = True
     return True
 
 
-constraints.append(timeslot_availability_within_a_group_constraint)
+constraints += [
+    teacher_conflict_constraint,
+    timeslot_availability_within_a_group_constraint,
+    subject_frequency_constraint,
+]
 
 
 def select_unassigned_variable(variables, assignment, domains):
     unassigned_vars = [v for v in variables if v not in assignment]
-
-    # If there are no unassigned variables left, return None
     if not unassigned_vars:
         return None
-
-    # Choose the variable with the fewest remaining values in its domain
-    # Break ties using the degree heuristic (number of constraints involving the variable)
-    def heuristic(var):
-        num_remaining_values = len(domains[var])
-        degree = sum(
-            1
-            for other_var in variables
-            if var != other_var
-            and not other_var in assignment
-            and set(domains[var]).intersection(domains[other_var])
-        )
-        return (num_remaining_values, -degree)
-
-    return min(unassigned_vars, key=heuristic)
+    return min(unassigned_vars, key=lambda var: len(domains[var]), default=None)
 
 
 def backtrack(assignment, depth=0):
-    if len(assignment) == TOTAL_SLOTS_TO_BE_FILLED:
+    if len(assignment) == len(variables):
         return assignment
 
     var = select_unassigned_variable(variables, assignment, domains)
     if var is None:
         return None
 
-    possible_values = copy.copy(domains[var])
-    random.shuffle(possible_values)
-
-    for possible_value in possible_values:
+    for value in domains[var]:
         new_assignment = assignment.copy()
-        new_assignment[var] = possible_value
+        new_assignment[var] = value
 
         if all(constraint(new_assignment) for constraint in constraints):
             result = backtrack(new_assignment, depth + 1)
             if result is not None:
                 return result
         else:
-            print(f"Constraint failed at depth {depth} for {new_assignment}")
+            print(f"Failed check at depth {depth} for {new_assignment}")
 
     return None
 
@@ -295,15 +267,13 @@ def print_timetable(solution):
         print("No solution found.")
         return
 
-    # Organizing the solution
     timetable = {
         group.name: {day: {ts: None for ts in timeslots} for day in days}
         for group in GROUPS
     }
-    for var, (subject, teacher) in solution.items():
-        timetable[var.group.name][var.day][var.timeslot] = (subject.name, teacher.name)
+    for var, (day, timeslot, teacher) in solution.items():
+        timetable[var.group.name][day][timeslot] = (var.subject.name, teacher.name)
 
-    # Printing the timetable
     for group_name, group_timetable in timetable.items():
         print(f"Timetable for {group_name}:")
         for day, day_schedule in group_timetable.items():
