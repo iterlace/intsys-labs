@@ -91,14 +91,14 @@ class GeneticAlgorithm:
         end = max(crossover_point1, crossover_point2)
         child1 = Schedule(
             schedule1.subjects,
-            schedule1.teachers,
+            schedule1.TEACHERS,
             schedule1.groups,
             schedule1.days,
             schedule1.timeslots_per_day,
         )
         child2 = Schedule(
             schedule2.subjects,
-            schedule2.teachers,
+            schedule2.TEACHERS,
             schedule2.groups,
             schedule2.days,
             schedule2.timeslots_per_day,
@@ -136,11 +136,11 @@ class GeneticAlgorithm:
                 timeslot.subject_id = random.randint(0, len(schedule.subjects) - 1)
             elif timeslot_property == 1:
                 for _ in range(20):
-                    timeslot.teacher_id = random.randint(0, len(schedule.teachers) - 1)
+                    timeslot.teacher_id = random.randint(0, len(schedule.TEACHERS) - 1)
 
                     if (
                         schedule.subjects[timeslot.subject_id]
-                        in schedule.teachers[timeslot.teacher_id].knowledgeable_subjects
+                        in schedule.TEACHERS[timeslot.teacher_id].knowledgeable_subjects
                     ):
                         break
             else:
