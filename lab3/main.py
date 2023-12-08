@@ -1,24 +1,68 @@
 import random
+from typing import List
+
+from pydantic import BaseModel
 
 
-class Group:
-    def __init__(self, name, required_subjects):
-        self.name = name
-        self.required_subjects = required_subjects
+class Group(BaseModel):
+    name: str
+    required_subjects: List[str]
+
+    def __init__(self, name: str, required_subjects: List[str]) -> None:
+        super().__init__(name=name, required_subjects=required_subjects)
+
+    def __hash__(self):
+        return hash((self.name, tuple(self.required_subjects)))
+
+    def __repr__(self):
+        return f"Group({self.name})"
+
+    def __str__(self):
+        return repr(self)
 
 
-class Teacher:
-    def __init__(self, name, available_time, knowledgeable_subjects):
-        self.name = name
-        self.available_time = available_time
-        self.knowledgeable_subjects = knowledgeable_subjects
+class Teacher(BaseModel):
+    name: str
+    available_time: int
+    knowledgeable_subjects: List[str]
+
+    def __init__(
+        self, name: str, available_time: int, knowledgeable_subjects: List[str]
+    ) -> None:
+        super().__init__(
+            name=name,
+            available_time=available_time,
+            knowledgeable_subjects=knowledgeable_subjects,
+        )
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __repr__(self):
+        return f"Teacher({self.name})"
+
+    def __str__(self):
+        return repr(self)
 
 
-class Timeslot:
-    def __init__(self, subject_id, teacher_id, group_id):
-        self.subject_id = subject_id
-        self.teacher_id = teacher_id
-        self.group_id = group_id
+class Timeslot(BaseModel):
+    subject_id: int
+    teacher_id: int
+    group_id: int
+
+    def __init__(self, subject_id: int, teacher_id: int, group_id: int) -> None:
+        super().__init__(
+            subject_id=subject_id, teacher_id=teacher_id, group_id=group_id
+        )
+
+    def __hash__(self):
+        return hash((self.subject_id, self.teacher_id, self.group_id))
+
+    def __repr__(self):
+        return f"Timeslot(subject_id={self.subject_id}, teacher_id={self.teacher_id}, group_id={self.group_id})"
+
+    def __str__(self):
+        return repr(self)
 
 
 class Schedule:
@@ -80,7 +124,7 @@ class GeneticAlgorithm:
 
     def generate_population(self, population_size):
         return [
-            Schedule(SUBJECTS, TEACHERS, GROUPS, DAYS, TIMESLOTS_PER_DAY)
+            Schedule(SUBJECTS, teachers, GROUPS, DAYS, TIMESLOTS_PER_DAY)
             for _ in range(population_size)
         ]
 
@@ -91,14 +135,14 @@ class GeneticAlgorithm:
         end = max(crossover_point1, crossover_point2)
         child1 = Schedule(
             schedule1.subjects,
-            schedule1.TEACHERS,
+            schedule1.teachers,
             schedule1.groups,
             schedule1.days,
             schedule1.timeslots_per_day,
         )
         child2 = Schedule(
             schedule2.subjects,
-            schedule2.TEACHERS,
+            schedule2.teachers,
             schedule2.groups,
             schedule2.days,
             schedule2.timeslots_per_day,
@@ -136,11 +180,11 @@ class GeneticAlgorithm:
                 timeslot.subject_id = random.randint(0, len(schedule.subjects) - 1)
             elif timeslot_property == 1:
                 for _ in range(20):
-                    timeslot.teacher_id = random.randint(0, len(schedule.TEACHERS) - 1)
+                    timeslot.teacher_id = random.randint(0, len(schedule.teachers) - 1)
 
                     if (
                         schedule.subjects[timeslot.subject_id]
-                        in schedule.TEACHERS[timeslot.teacher_id].knowledgeable_subjects
+                        in schedule.teachers[timeslot.teacher_id].knowledgeable_subjects
                     ):
                         break
             else:
@@ -193,7 +237,7 @@ SUBJECTS = [
     "Філософія",
     "Алгоритміка",
 ]
-TEACHERS = [
+teachers = [
     Teacher("Камаз Павлович", 6, ["Програмування", "Дискретна математика"]),
     Teacher("Макар Бьорнович", 4, ["Іноземна мова"]),
     Teacher("Монстр Хайнєкен", 5, ["Філософія", "Іноземна мова"]),
@@ -218,7 +262,7 @@ for day in DAYS:
 
         print(
             f"{day}, {slot+1} пара: {SUBJECTS[timeslot.subject_id]} від "
-            f"{TEACHERS[timeslot.teacher_id].name} для {GROUPS[timeslot.group_id].name}"
+            f"{teachers[timeslot.teacher_id].name} для {GROUPS[timeslot.group_id].name}"
         )
 
 print(f"Fitness score: {best_fitness_score}")
