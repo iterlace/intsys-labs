@@ -1,7 +1,15 @@
 import random
 from typing import List
 
-from pydantic import BaseModel
+import pydantic
+
+
+class BaseModel(pydantic.BaseModel):
+    def __repr__(self):
+        return f"{self.__class__.__name__}({', '.join(self.model_dump(mode='python'))})"
+
+    def __str__(self):
+        return repr(self)
 
 
 class Group(BaseModel):
@@ -13,12 +21,6 @@ class Group(BaseModel):
 
     def __hash__(self):
         return hash((self.name, tuple(self.required_subjects)))
-
-    def __repr__(self):
-        return f"Group({self.name})"
-
-    def __str__(self):
-        return repr(self)
 
 
 class Teacher(BaseModel):
@@ -38,12 +40,6 @@ class Teacher(BaseModel):
     def __hash__(self):
         return hash(self.name)
 
-    def __repr__(self):
-        return f"Teacher({self.name})"
-
-    def __str__(self):
-        return repr(self)
-
 
 class Timeslot(BaseModel):
     subject_id: int
@@ -57,12 +53,6 @@ class Timeslot(BaseModel):
 
     def __hash__(self):
         return hash((self.subject_id, self.teacher_id, self.group_id))
-
-    def __repr__(self):
-        return f"Timeslot(subject_id={self.subject_id}, teacher_id={self.teacher_id}, group_id={self.group_id})"
-
-    def __str__(self):
-        return repr(self)
 
 
 class Schedule:
@@ -199,7 +189,13 @@ class GeneticAlgorithm:
 
         return schedule
 
-    def start(self):
+    def tournament_selection(self, k: int) -> Schedule:
+        contenders = random.sample(self.population, k)
+        fitness_scores = [schedule.check_correctness() for schedule in contenders]
+        winner_index = fitness_scores.index(max(fitness_scores))
+        return contenders[winner_index]
+
+    def start(self) -> (Schedule, float):
         best_schedule = None
         best_fitness_score = 0
 
@@ -211,11 +207,13 @@ class GeneticAlgorithm:
             schedule, fitness_score = self.select_best(fitness_scores)
             best_schedule = schedule
             best_fitness_score = fitness_score
+
             new_population = []
 
             while len(new_population) < POPULATION_SIZE:
-                parents = sorted(self.population, key=lambda _: random.random())[:2]
-                child1, child2 = self.create_offspring(parents[0], parents[1])
+                parent1 = self.tournament_selection(3)  # Турнір між 3 кандидатами
+                parent2 = self.tournament_selection(3)  # Турнір між 3 кандидатами
+                child1, child2 = self.create_offspring(parent1, parent2)
                 new_population.extend([self.mutate(child1), self.mutate(child2)])
 
             self.population = new_population
