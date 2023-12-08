@@ -1,6 +1,6 @@
 import copy
 import random
-from typing import List
+from typing import Dict, List, Optional, Set, Tuple
 
 import pydantic
 
@@ -168,16 +168,19 @@ class Variable(pydantic.BaseModel):
         return repr(self)
 
 
+Assignment = Dict[Variable, Tuple[str, int, Teacher]]
+
+
 # Variables
-variables = [
+variables: List[Variable] = [
     Variable(group, gs.subject, subject_no)
     for group in GROUPS
     for gs in group.subjects
     for subject_no in range(gs.hours)
 ]
 
-# Domains: tuples of (Day, Timeslot, Teacher)
-domains = {
+# Domains
+domains: Dict[Variable, List[Tuple[str, int, Teacher]]] = {
     var: [
         (day, timeslot, teacher)
         for day in days
@@ -193,7 +196,7 @@ constraints = []
 
 
 # Constraint: Ensure each subject is taught the required number of hours per week for each group
-def subject_frequency_constraint(assignment):
+def subject_frequency_constraint(assignment: Assignment) -> bool:
     scheduled_counts = {(var.group, var.subject): 0 for var in variables}
     for var, _ in assignment.items():
         scheduled_counts[(var.group, var.subject)] += 1
@@ -207,7 +210,7 @@ def subject_frequency_constraint(assignment):
 
 
 # Constraint: A teacher cannot teach more than one class at the same time
-def teacher_conflict_constraint(assignment):
+def teacher_conflict_constraint(assignment: Assignment) -> bool:
     teacher_times = {}
     for var, (day, timeslot, teacher) in assignment.items():
         if (teacher, day, timeslot) in teacher_times:
@@ -217,7 +220,7 @@ def teacher_conflict_constraint(assignment):
 
 
 # Constraint: No group should have more than one class at a time
-def timeslot_availability_within_a_group_constraint(assignment):
+def timeslot_availability_within_a_group_constraint(assignment: Assignment) -> bool:
     group_times = {}
     for var, (day, timeslot, _) in assignment.items():
         if (var.group, day, timeslot) in group_times:
@@ -233,14 +236,20 @@ constraints += [
 ]
 
 
-def select_unassigned_variable(variables, assignment, domains):
+def select_unassigned_variable(
+    variables: List[Variable],
+    assignment: Assignment,
+    domains: Dict[Variable, List[Tuple[str, int, Teacher]]],
+) -> Optional[Variable]:
     unassigned_vars = [v for v in variables if v not in assignment]
     if not unassigned_vars:
         return None
     return min(unassigned_vars, key=lambda var: len(domains[var]), default=None)
 
 
-def backtrack(assignment, depth=0):
+def backtrack(
+    assignment: Assignment, depth: int = 0
+) -> Optional[Dict[Variable, Tuple[str, int, Teacher]]]:
     if len(assignment) == len(variables):
         return assignment
 
@@ -262,7 +271,9 @@ def backtrack(assignment, depth=0):
     return None
 
 
-def print_timetable(solution):
+def print_timetable(
+    solution: Optional[Dict[Variable, Tuple[str, int, Teacher]]]
+) -> None:
     if not solution:
         print("No solution found.")
         return
@@ -290,7 +301,7 @@ def print_timetable(solution):
         print("-" * 40)
 
 
-def main():
+def main() -> Optional[Dict[Variable, Tuple[str, int, Teacher]]]:
     for var in variables:
         if not domains[var]:
             print(f"Empty domain for variable: {var}")
