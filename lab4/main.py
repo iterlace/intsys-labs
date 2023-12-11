@@ -236,15 +236,83 @@ constraints += [
 ]
 
 
-def select_unassigned_variable(
-    variables: List[Variable],
+def least_constraining_value_heuristics(
+    var: Variable,
     assignment: Assignment,
-    domains: Dict[Variable, List[Tuple[str, int, Teacher]]],
+    domains_: Dict[Variable, List[Tuple[str, int, Teacher]]],
+) -> List[Tuple[str, int, Teacher]]:
+    unassigned_vars = [v for v in variables if v not in assignment and v != var]
+
+    def count_legal_values(value: Tuple[str, int, Teacher]) -> int:
+        # Count how many legal values are left for other variables if 'value' is chosen for 'var'
+        count = 0
+        for other_var in unassigned_vars:
+            for other_value in domains_[other_var]:
+                if not constraints_conflict(var, value, other_var, other_value):
+                    count += 1
+        return count
+
+    return sorted(domains_[var], key=count_legal_values, reverse=True)
+
+
+def constraints_conflict(
+    var1: Variable,
+    value1: Tuple[str, int, Teacher],
+    var2: Variable,
+    value2: Tuple[str, int, Teacher],
+) -> bool:
+    # Check if assigning value1 to var1 and value2 to var2 would violate any constraint
+    day1, timeslot1, teacher1 = value1
+    day2, timeslot2, teacher2 = value2
+
+    if var1.group == var2.group and day1 == day2 and timeslot1 == timeslot2:
+        return True  # Same group cannot have two classes at the same time
+    if teacher1 == teacher2 and day1 == day2 and timeslot1 == timeslot2:
+        return True  # A teacher cannot teach two classes at the same time
+
+    return False
+
+
+def degree_heuristic(
+    variables_: List[Variable],
+    assignment: Assignment,
+    domains_: Dict[Variable, List[Tuple[str, int, Teacher]]],
 ) -> Optional[Variable]:
-    unassigned_vars = [v for v in variables if v not in assignment]
+    unassigned_vars = [v for v in variables_ if v not in assignment]
     if not unassigned_vars:
         return None
-    return min(unassigned_vars, key=lambda var: len(domains[var]), default=None)
+
+    def constraint_degree(var: Variable) -> int:
+        count = 0
+        for other_var in unassigned_vars:
+            if other_var != var:
+                shared_domains = set(domains_[var]) & set(domains_[other_var])
+                count += len(shared_domains)
+        return count
+
+    return max(unassigned_vars, key=constraint_degree, default=None)
+
+
+def least_domains_heuristics(
+    variables_: List[Variable],
+    assignment: Assignment,
+    domains_: Dict[Variable, List[Tuple[str, int, Teacher]]],
+) -> Optional[Variable]:
+    unassigned_vars = [v for v in variables_ if v not in assignment]
+    if not unassigned_vars:
+        return None
+    return min(unassigned_vars, key=lambda var: len(domains_[var]), default=None)
+
+
+def select_unassigned_variable(
+    variables_: List[Variable],
+    assignment: Assignment,
+    domains_: Dict[Variable, List[Tuple[str, int, Teacher]]],
+) -> Optional[Variable]:
+    unassigned_vars = [v for v in variables_ if v not in assignment]
+    if not unassigned_vars:
+        return None
+    return unassigned_vars[0]
 
 
 def backtrack(
@@ -253,11 +321,17 @@ def backtrack(
     if len(assignment) == len(variables):
         return assignment
 
-    var = select_unassigned_variable(variables, assignment, domains)
+    # #1
+    # var = select_unassigned_variable(variables, assignment, domains)
+    # #2
+    var = least_domains_heuristics(variables, assignment, domains)
+    # #3
+    # var = degree_heuristic(variables, assignment, domains)
+
     if var is None:
         return None
 
-    for value in domains[var]:
+    for value in least_constraining_value_heuristics(var, assignment, domains):
         new_assignment = assignment.copy()
         new_assignment[var] = value
 
