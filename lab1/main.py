@@ -1,99 +1,110 @@
-from typing import Dict, List, Optional
+from owlready2 import *
+
+onto = get_ontology("http://example.org/school_ontology.owl")
 
 
-class Student:
-    def __init__(self, name: str, grade_level: int):
-        self.name = name
-        self.grade_level = grade_level
+# Class definitions
+class Student(Thing):
+    namespace = onto
+
+    def display_info(self) -> None:
+        print(f"Student: {self.name}, Grade Level: {self.grade_level}")
 
 
-class Grade:
-    def __init__(self, level: int):
-        self.level = level
-        self.students: List[Student] = []
+class Grade(Thing):
+    namespace = onto
 
-    def add_student(self, student: Student):
-        self.students.append(student)
-
-    def remove_student(self, student_name: str):
-        self.students = [
-            student for student in self.students if student.name != student_name
+    def display_students(self) -> None:
+        students = [
+            student for student in Student.instances() if student.in_grade == self
         ]
-
-    def get_students(self) -> List[Student]:
-        return self.students
-
-
-class School:
-    def __init__(self, name: str):
-        self.name = name
-        self.grades: Dict[int, Grade] = {}
-
-    def add_grade(self, grade_level: int):
-        if grade_level not in self.grades:
-            self.grades[grade_level] = Grade(grade_level)
-
-    def add_student_to_grade(self, student: Student, grade_level: int):
-        if grade_level not in self.grades:
-            self.add_grade(grade_level)
-        self.grades[grade_level].add_student(student)
-
-    def get_students_in_grade(self, grade_level: int) -> List[Student]:
-        if grade_level in self.grades:
-            return self.grades[grade_level].get_students()
-        return []
+        print(f"Students in Grade {self.level}:")
+        for student in students:
+            print(f"    {student.name}")
 
 
-class City:
-    def __init__(self, name: str):
-        self.name = name
-        self.schools: List[School] = []
+class School(Thing):
+    namespace = onto
 
-    def add_school(self, school: School):
-        self.schools.append(school)
-
-    def get_schools(self) -> List[School]:
-        return self.schools
+    def display_grades(self) -> None:
+        print(f"Grades in {self.name} School:")
+        for grade in self.contains_grade:
+            print(f"    Grade {grade.level}")
 
 
-def find_city_for_student(
-    array_of_cities: List[City], student_name: str
-) -> Optional[str]:
-    for city in array_of_cities:
-        for school in city.schools:
-            for grade_level, grade in school.grades.items():
-                if any(student.name == student_name for student in grade.students):
-                    return city.name
-    return None
+class City(Thing):
+    namespace = onto
+
+    def display_schools(self) -> None:
+        print(f"Schools in {self.name} City:")
+        for school in self.has_school:
+            print(f"    {school.name}")
 
 
-def main():
-    # Example usage
-    kyiv = City("Kyiv")
-    alice = Student("Alice", 3)
-    bob = Student("Bob", 5)
-    jack = Student("Jack", 7)
-    school_1 = School("School #1")
-    school_1.add_student_to_grade(alice, 3)
-    school_1.add_student_to_grade(bob, 5)
-    school_2 = School("School #2")
-    school_2.add_student_to_grade(jack, 7)
+# Property definitions
+class name(DataProperty):
+    namespace = onto
+    domain = [Student, School, City]
+    range = [str]
 
-    kyiv.add_school(school_1)
 
-    # Display students in School #1 in Kyiv
-    for grade_level, grade in school_1.grades.items():
-        print(f"Grade: {grade_level}")
-        for student in grade.get_students():
-            print(f"	Student: {student.name}, Grade: {student.grade_level}")
+class grade_level(DataProperty, FunctionalProperty):
+    namespace = onto
+    domain = [Student]
+    range = [int]
 
-    print("Looking for Alice in [Kyiv]...")
-    c = find_city_for_student([kyiv], "Alice")
-    if c is not None:
-        print(f"Found Alice in {c}")
-    else:
-        print("Alice not found")
+
+class level(DataProperty, FunctionalProperty):
+    namespace = onto
+    domain = [Grade]
+    range = [int]
+
+
+class in_grade(ObjectProperty, FunctionalProperty):
+    namespace = onto
+    domain = [Student]
+    range = [Grade]
+
+
+class contains_grade(ObjectProperty):
+    namespace = onto
+    domain = [School]
+    range = [Grade]
+
+
+class has_school(ObjectProperty):
+    namespace = onto
+    domain = [City]
+    range = [School]
 
 
 if __name__ == "__main__":
-    main()
+    # Example usage
+    grade_10 = Grade("grade_10")
+    grade_10.level = 10
+
+    school_X = School("school_X")
+    school_X.contains_grade.append(grade_10)
+
+    city_Y = City("city_Y")
+    city_Y.has_school.append(school_X)
+
+    # Create students
+    student_A = Student("student_A")
+    student_A.name = "Alice"
+    student_A.grade_level = 10
+    student_A.in_grade = grade_10
+
+    student_B = Student("student_B")
+    student_B.name = "Bob"
+    student_B.grade_level = 10
+    student_B.in_grade = grade_10
+
+    # Display information
+    student_A.display_info()
+    student_B.display_info()
+    grade_10.display_students()
+    school_X.display_grades()
+    city_Y.display_schools()
+
+    onto.save(file="school_ontology.owl", format="rdfxml")
